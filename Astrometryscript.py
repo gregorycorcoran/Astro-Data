@@ -1,4 +1,3 @@
-import numpy as np
 from glob import glob
 import os
 from multiprocessing import Pool
