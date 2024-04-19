@@ -94,7 +94,7 @@ def Build_obs(target,mask_wise,ignore_spec):
             i+=1
         i+=1
     obs["phot_wave"] = np.array([f.wave_effective for f in obs["filters"]])
-    if target!='NGC3705' and ignore_spec :
+    if target!='NGC3705' and  not ignore_spec :
         spec=fits.open(f'./SDSS_Spec/spec_{target}.fits')[1].data
         obs['wavelength']=10**spec['loglam']
         obs['spectrum']=(spec_scaling[target])*(10**(-7))*spec['flux']/3631
@@ -135,12 +135,63 @@ def build_all(target,mask_wise,model_name,ignore_spec):
     
 if __name__ == '__main__':
     obs, model, sps, noise = build_all('NGC3016',False,'parametric_sfh',True)
-    hfile = "script_test1_mcmc.h5"
-    with Pool(4) as p:
-        fitting_kwargs = dict(optimize=True,emcee=True,dynesty=False,nwalkers=128,niter=512,nburn=[16,32,64],pool=p)
-        output = fit_model(obs, model, sps, noise, **fitting_kwargs)
-    writer.write_hdf5(hfile, {}, model, obs, output["sampling"][0], output["optimization"][0], tsample=output["sampling"][1], toptimize=output["optimization"][1],sps=sps)
+    try:
+        import mpi4py
+        from mpi4py import MPI
+        from schwimmbad import MPIPool
+
+        mpi4py.rc.threads = False
+        mpi4py.rc.recv_mprobe = False
+
+        comm = MPI.COMM_WORLD
+        size = comm.Get_size()
+
+        withmpi = comm.Get_size() > 1
+    except ImportError:
+        print('Failed to start MPI; are mpi4py and schwimmbad installed? Proceeding without MPI.')
+        withmpi = False
+    if (withmpi) & ('logzsol' in model.free_params):
+        dummy_obs = dict(filters=None, wavelength=None)
+
+        logzsol_prior = model.config_dict["logzsol"]['prior']
+        lo, hi = logzsol_prior.range
+        logzsol_grid = np.around(np.arange(lo, hi, step=0.1), decimals=2)
+
+        sps.update(**model.params)  # make sure we are caching the correct IMF / SFH / etc
+        for logzsol in logzsol_grid:
+            model.params["logzsol"] = np.array([logzsol])
+            _ = model.predict(model.theta, obs=dummy_obs, sps=sps)
+    from prospect.fitting import lnprobfn
+    from functools import partial
+    fitting_kwargs = dict(optimize=True,emcee=True,dynesty=False,nwalkers=128,niter=512,nburn=[16,32,64])
+    lnprobfn_fixed = partial(lnprobfn, sps=sps)
+    if withmpi:
+        with MPIPool() as pool:
+            # The subprocesses will run up to this point in the code
+            if not pool.is_master():
+                pool.wait()
+                sys.exit(0)
+            nprocs = pool.size
+            output = fit_model(obs, model, sps, noise, pool=pool, queue_size=nprocs, lnprobfn=lnprobfn_fixed, **fitting_kwargs)
+    else:
+        output = fit_model(obs, model, sps, noise, lnprobfn=lnprobfn_fixed, **fitting_kwargs)
+
+    hfile = "test_mcmc.h5"
+    writer.write_hdf5(hfile, fitting_kwargs, model, obs,
+                      output["sampling"][0], output["optimization"][0],
+                      tsample=output["sampling"][1],
+                      toptimize=output["optimization"][1],
+                      sps=sps)
+
     try:
         hfile.close()
     except(AttributeError):
         pass
+
+    # with Pool(4) as p:
+    #     output = fit_model(obs, model, sps, noise, **fitting_kwargs)
+    # writer.write_hdf5(hfile, {}, model, obs, output["sampling"][0], output["optimization"][0], tsample=output["sampling"][1], toptimize=output["optimization"][1],sps=sps)
+    # try:
+    #     hfile.close()
+    # except(AttributeError):
+    #     pass
