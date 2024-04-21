@@ -6,7 +6,7 @@ from prospect.models.templates import TemplateLibrary
 from prospect.sources import FastStepBasis,CSPSpecBasis
 from prospect.utils.obsutils import fix_obs
 from astropy.io import fits
-from prospect.models import SpecModel
+from prospect.models import SpecModel,priors
 
 
 Photometry=np.genfromtxt('./photometry.csv',delimiter=',',names=True,missing_values=np.nan)
@@ -75,6 +75,41 @@ redshifts={'MCG05':0.003,
 #               'zcontinuous': 1,
 #               }
 
+# def truncate()
+
+
+# zred = {"N": 1, "isfree": False,
+#         "init": 0.1,
+#         "units": "redshift",
+#         "prior": priors.TopHat(mini=0.0, maxi=4.0)}
+
+# mass = {"N": 1, "isfree": True,
+#         "init": 1e10,
+#         "units": "Solar masses formed",
+#         "prior": priors.LogUniform(mini=1e8, maxi=1e12)}
+
+# logzsol = {"N": 1, "isfree": True,
+#            "init": -0.5,
+#            "units": r"$\log (Z/Z_\odot)$",
+#            "prior": priors.TopHat(mini=-2, maxi=0.19)}
+
+# dust2 = {"N": 1, "isfree": True,
+#          "init": 0.6,
+#          "units": "optical depth at 5500AA",
+#          "prior": priors.TopHat(mini=0.0, maxi=2.0)}
+
+# sfh = {"N": 1, "isfree": False, "init": 5, "units": "FSPS index"}
+
+# tage = {"N": 1, "isfree": True,
+#         "init": 1, "units": "Gyr",
+#         "prior": priors.TopHat(mini=0.001, maxi=13.8)}
+# t_trans={"N":1,'isfree':False,'init':10.7,'units':'Gyr'}
+# sf_slope={"N":1,'isfree':True,'init':0,'units':}
+
+
+
+
+
 def Build_obs(target,mask_wise,ignore_spec):
     obs={}
     obs['redshift']=redshifts[target]
@@ -108,13 +143,19 @@ def Build_obs(target,mask_wise,ignore_spec):
     obs=fix_obs(obs)
     return obs
 
-def build_model(model_name,obs,fix_tage=False):
+def build_model(model_name,obs,fix_tage=False,low_mass=False,AGN=False):
     model_params = TemplateLibrary[model_name]
     model_params.update(TemplateLibrary["nebular"])
     model_params["zred"]["init"] = obs["redshift"]
     if fix_tage:
         model_params["tage"]["isfree"]=False
         model_params["tage"]["init"]=12.8
+    if low_mass:
+        model_params["mass"]["prior"]=priors.LogUniform(mini=1_000_000,maxi=100_000_000)
+        model_params["mass"]["init"]=10_000_000
+    if AGN:
+        model_params.update(TemplateLibrary["agn"])
+        model_params["fagn"]["isfree"]=True
     model = SpecModel(model_params)
     return model
 
@@ -129,40 +170,30 @@ def build_sps(model_name,zcontinuous=1):
 def build_noise():
     return None, None
 
-def build_all(target,mask_wise,model_name,ignore_spec,fix_tage=False):
+def build_all(target,mask_wise,model_name,ignore_spec,fix_tage=False,low_mass=False,AGN=False):
     obs=Build_obs(target,mask_wise,ignore_spec)
-    model=build_model(model_name,obs,fix_tage)
+    model=build_model(model_name,obs,fix_tage,low_mass,AGN)
     sps=build_sps(model_name)
     noise=build_noise()
     return obs,model,sps,noise
 
 if __name__ == '__main__':
     #In serial since was not great otherwise
-    obs, model, sps, noise = build_all('NVSSJ09',True,'parametric_sfh',True,False)
+    # obs, model, sps, noise = build_all('MCG06',True,'parametric_sfh',True,True,False,True)
+    # fitting_kwargs = dict(optimize=True,emcee=True,dynesty=False,nwalkers=128,niter=1024)
+    # output = fit_model(obs, model, sps, **fitting_kwargs)
+    # result, duration = output["sampling"]
+    # hfile = "./quickstart_emcee_MCG06_2.h5"
+    # writer.write_hdf5(hfile, {}, model, obs,
+    #              output["sampling"][0], None,
+    #              sps=sps,
+    #              tsample=output["sampling"][1],
+    #              toptimize=0.0)
+    obs, model, sps, noise = build_all('NVSSJ09',True,'parametric_sfh',True,True,False,True)
     fitting_kwargs = dict(optimize=True,emcee=True,dynesty=False,nwalkers=128,niter=1024)
     output = fit_model(obs, model, sps, **fitting_kwargs)
     result, duration = output["sampling"]
-    hfile = "./quickstart_emcee_NVSSJ09.h5"
-    writer.write_hdf5(hfile, {}, model, obs,
-                 output["sampling"][0], None,
-                 sps=sps,
-                 tsample=output["sampling"][1],
-                 toptimize=0.0)
-    obs, model, sps, noise = build_all('NGC6365A',True,'parametric_sfh',True,False)
-    fitting_kwargs = dict(optimize=True,emcee=True,dynesty=False,nwalkers=128,niter=1024)
-    output = fit_model(obs, model, sps, **fitting_kwargs)
-    result, duration = output["sampling"]
-    hfile = "./quickstart_emcee_NGC6365A.h5"
-    writer.write_hdf5(hfile, {}, model, obs,
-                 output["sampling"][0], None,
-                 sps=sps,
-                 tsample=output["sampling"][1],
-                 toptimize=0.0)
-    obs, model, sps, noise = build_all('UGC9379',True,'parametric_sfh',True,True)
-    fitting_kwargs = dict(optimize=True,emcee=True,dynesty=False,nwalkers=128,niter=1024)
-    output = fit_model(obs, model, sps, **fitting_kwargs)
-    result, duration = output["sampling"]
-    hfile = "./quickstart_emcee_UGC9379.h5"
+    hfile = "./quickstart_emcee_NVSSJ09_3.h5"
     writer.write_hdf5(hfile, {}, model, obs,
                  output["sampling"][0], None,
                  sps=sps,
