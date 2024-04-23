@@ -60,6 +60,8 @@ cosi_dict={}
 offset_dict={}
 r50_dict={}
 r90_dict={}
+sma_dict={}
+PA_dict={}
 fig, axes = plt.subplots(7, 3,figsize=(15,35),layout='constrained')
 for num,gal in enumerate(gals):
     im_test=f'./WCS_Solved/{gal}/{gal}_R.fits'
@@ -156,16 +158,18 @@ for num,gal in enumerate(gals):
     offset_dict[gal]=offset
     r50_dict[gal]=R_50
     r90_dict[gal]=R_90
+    sma_dict[gal]=sma_r50/cos_i
+    PA_dict[gal]=pa
     ax1.plot(x2,y2,color='r',zorder=10,label=f'$r_{{50}}={R_50:.0f}$\"')
     ax1.plot(x3,y3,color='r',zorder=10,ls='--',label=f'$r_{{90}}={R_90:.0f}$\"')
     ax1.scatter(sn_x,sn_y,[100],marker='*',color='red',label=sn_names[gal])
     ax1.scatter(pix_max[1],pix_max[0],[30],marker='+',color='green',label='Brightest Pixel')
     ax1.scatter(np.median(isos.x0),np.median(isos.y0),[30],marker='x',color='red',label='Median Centroid')
     ax1.legend(loc='lower left')
-plt.savefig('./Isophotes_final2.png')
+plt.savefig('./Isophotes_final3.png')
 #This is a different way but going to run with it
 result_dict={}
 for gal in galaxies.keys():
-    result_dict[gal]={'b_a':b_a_dict[gal],'cos_i':cosi_dict[gal],'offset':offset_dict[gal],'r_50':r50_dict[gal],'r_90':r90_dict[gal]}
+    result_dict[gal]={'b_a':b_a_dict[gal],'cos_i':cosi_dict[gal],'offset':offset_dict[gal],'r_50':r50_dict[gal],'r_90':r90_dict[gal],'sma50':sma_dict[gal],'PA':PA_dict[gal]}
 with open('./iso_res.json', 'w', encoding='utf-8') as f:
     json.dump(result_dict,f,ensure_ascii=False, indent=4)
