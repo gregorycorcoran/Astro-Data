@@ -62,6 +62,8 @@ r50_dict={}
 r90_dict={}
 sma_dict={}
 PA_dict={}
+Norm_dict={}
+d_Norm_dict={}
 fig, axes = plt.subplots(7, 3,figsize=(15,35),layout='constrained')
 for num,gal in enumerate(gals):
     im_test=f'./WCS_Solved/{gal}/{gal}_R.fits'
@@ -120,6 +122,7 @@ for num,gal in enumerate(gals):
     smas = np.linspace(np.min(isos.sma), np.max(isos.sma), 20)
     half_flux=0.5*np.nanmax(isos.tflux_e)
     iso_ind_50=np.nanargmin([np.abs(el-half_flux) for el in isos.tflux_e])
+    d_e=np.abs(isos.ellip_err[iso_ind_50])
     sma_r50=isos.sma[iso_ind_50]
     iso_50=isos.get_closest(sma_r50)
     x2,y2=iso_50.sampled_coordinates()
@@ -150,9 +153,13 @@ for num,gal in enumerate(gals):
     gal_x_med,gal_y_med=Padded_Coord_Rotator(np.median(isos.x0),np.median(isos.y0),pa,padX,padY)
     cos_i=(((1-isos.eps[iso_ind_90])**2-(0.2**2)))/(1-0.2**2)
     b_a=1-isos.eps[iso_ind_90]
+    d_cos_i=np.abs((2/(1-0.2**2))*(b_a)*d_e)
     offset=np.sqrt((sn_x_adj-gal_x_med)**2+((sn_y_adj-gal_y_med)/cos_i)**2)*0.6
+    d_offset=np.sqrt(((0.6**2)*(np.std(isos.x0)+np.std(isos.y0)))+1+(1/cos_i)**2+(((np.abs(sn_y_adj-gal_y_med)/cos_i)*d_cos_i)/(cos_i**2)))
     R_50=(sma_r50/cos_i)*np.sqrt((1-isos.eps[iso_ind_50]))*0.6
     R_90=(sma_r90/cos_i)*np.sqrt((1-isos.eps[iso_ind_90]))*0.6
+    d_r_50=np.sqrt((1-isos.eps[iso_ind_90])*d_e**2)
+    d_Norm=np.sqrt((d_offset/R_50)**2+((offset*d_r_50)/(R_50**2))**2)
     b_a_dict[gal]=b_a
     cosi_dict[gal]=cos_i
     offset_dict[gal]=offset
@@ -160,16 +167,20 @@ for num,gal in enumerate(gals):
     r90_dict[gal]=R_90
     sma_dict[gal]=sma_r50/cos_i
     PA_dict[gal]=pa
+    Norm_dict[gal]=offset/R_50
+    d_Norm_dict[gal]=d_Norm
+
     ax1.plot(x2,y2,color='r',zorder=10,label=f'$r_{{50}}={R_50:.0f}$\"')
     ax1.plot(x3,y3,color='r',zorder=10,ls='--',label=f'$r_{{90}}={R_90:.0f}$\"')
     ax1.scatter(sn_x,sn_y,[100],marker='*',color='red',label=sn_names[gal])
     ax1.scatter(pix_max[1],pix_max[0],[30],marker='+',color='green',label='Brightest Pixel')
     ax1.scatter(np.median(isos.x0),np.median(isos.y0),[30],marker='x',color='red',label='Median Centroid')
     ax1.legend(loc='lower left')
-plt.savefig('./Isophotes_final3.png')
+plt.savefig('./Isophotes_final3.pdf')
 #This is a different way but going to run with it
 result_dict={}
 for gal in galaxies.keys():
-    result_dict[gal]={'b_a':b_a_dict[gal],'cos_i':cosi_dict[gal],'offset':offset_dict[gal],'r_50':r50_dict[gal],'r_90':r90_dict[gal],'sma50':sma_dict[gal],'PA':PA_dict[gal]}
-with open('./iso_res.json', 'w', encoding='utf-8') as f:
+    result_dict[gal]={'b_a':b_a_dict[gal],'cos_i':cosi_dict[gal],'offset':offset_dict[gal],'r_50':r50_dict[gal],\
+                      'r_90':r90_dict[gal],'sma50':sma_dict[gal],'PA':PA_dict[gal],'Normalised Offset': Norm_dict[gal], 'd_Norm_Off': d_Norm_dict[gal]}
+with open('./iso_res3.json', 'w', encoding='utf-8') as f:
     json.dump(result_dict,f,ensure_ascii=False, indent=4)
